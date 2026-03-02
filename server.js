@@ -229,6 +229,8 @@ function construirModeloGrafico(tipo, datos, opciones = {}) {
           padding: 8
         },
         cutoutPercentage: opciones.cutoutPercentage,
+        rotation: opciones.rotation,
+        circumference: opciones.circumference,
         plugins: {
           legend: { display: false },
           title: { display: false },
@@ -289,7 +291,7 @@ function agruparRegistrosPorMes(registros) {
   });
 
   return Array.from(grupos.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([, valor]) => valor);
 }
 
@@ -297,8 +299,8 @@ function construirConfigGraficoPie(titulo, datos) {
   return construirModeloGrafico('pie', datos);
 }
 
-function construirConfigGraficoDona(titulo, datos) {
-  return construirModeloGrafico('doughnut', datos, { cutoutPercentage: 58 });
+function construirConfigGraficoDona(titulo, datos, opciones = {}) {
+  return construirModeloGrafico('doughnut', datos, { cutoutPercentage: 58, ...opciones });
 }
 
 function construirConfigDistribucionIngresos(resumen) {
@@ -426,21 +428,24 @@ function dibujarTablaCategoriasPanel(doc, x, y, width, height, resumen) {
 }
 
 function dibujarLeyendaGrafico(doc, x, y, width, height, leyenda) {
-  const inicioY = y + 6;
+  const headerHeight = 14;
   const filaAlto = 18;
-  const disponibles = Math.max(1, Math.floor((height - 6) / filaAlto));
+  const disponibles = Math.max(1, Math.floor((height - headerHeight) / filaAlto));
   const visibles = (leyenda || []).slice(0, disponibles);
 
   if (visibles.length === 0) {
-    doc.fillColor('#64748B').fontSize(8.5).text('Sin datos', x, inicioY + 8, { width });
+    doc.fillColor('#64748B').fontSize(8.5).text('Sin datos', x, y + (height / 2) - 5, { width });
     return;
   }
+
+  const contenidoAlto = headerHeight + visibles.length * filaAlto;
+  const inicioY = y + Math.max(0, (height - contenidoAlto) / 2);
 
   doc.fillColor('#334155').fontSize(8).text('Categoría', x + 16, inicioY, { width: width * 0.62 });
   doc.text('%', x + width * 0.72, inicioY, { width: width * 0.2, align: 'right' });
 
   visibles.forEach((item, index) => {
-    const rowY = inicioY + 14 + index * filaAlto;
+    const rowY = inicioY + headerHeight + index * filaAlto;
     doc.circle(x + 6, rowY + 5, 4).fill(item.color);
     doc.fillColor('#0F172A').fontSize(8.2).text(item.label, x + 16, rowY, {
       width: width * 0.6,
@@ -492,7 +497,10 @@ async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) 
   const resumen = calcularResumen(registros);
   const modelosGraficos = [
     construirConfigGraficoPie('Gastos por categoría', resumen.gastosPorCategoria),
-    construirConfigGraficoDona('Ingresos por categoría', resumen.ingresosPorCategoria),
+    construirConfigGraficoDona('Ingresos por categoría', resumen.ingresosPorCategoria, {
+      rotation: -Math.PI,
+      circumference: Math.PI
+    }),
     construirConfigDistribucionIngresos(resumen)
   ];
   const graficos = await Promise.all(
