@@ -111,6 +111,43 @@ function formatearMoneda(valor) {
   }).format(valor);
 }
 
+function convertirFechaExcel(valor) {
+  const fecha = new Date(valor);
+  return Number.isNaN(fecha.getTime()) ? null : fecha;
+}
+
+function construirWorksheetExcel(registros) {
+  const encabezados = ['Fecha', 'Tipo', 'Categoría', 'Descripción', 'Valor'];
+  const filas = registros.map(registro => [
+    convertirFechaExcel(obtenerPrimerValor(registro, ['Fecha', 'fecha'])) ||
+      obtenerPrimerValor(registro, ['Fecha', 'fecha']),
+    obtenerPrimerValor(registro, ['Tipo', 'tipo']),
+    obtenerPrimerValor(registro, ['Categoria', 'Categoría', 'categoria']),
+    obtenerPrimerValor(registro, ['Descripcion', 'Descripción', 'descripcion']),
+    convertirNumero(registro.Valor)
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas], { cellDates: true });
+
+  for (let index = 0; index < filas.length; index += 1) {
+    const cellRef = XLSX.utils.encode_cell({ r: index + 1, c: 0 });
+    const cell = ws[cellRef];
+    if (cell && cell.v instanceof Date) {
+      cell.z = 'dd/mm/yyyy';
+    }
+  }
+
+  ws['!cols'] = [
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 42 },
+    { wch: 14 }
+  ];
+
+  return ws;
+}
+
 function generarPdfInforme(res, nombre, registros) {
   const totales = { Ingreso: 0, Gasto: 0, Ahorro: 0, Inversión: 0 };
   registros.forEach(registro => {
@@ -201,9 +238,9 @@ app.get('/api/descargar/excel', async (req, res) => {
     }
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(misRegistros);
+    const ws = construirWorksheetExcel(misRegistros);
     XLSX.utils.book_append_sheet(wb, ws, 'Mis Registros');
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx', cellDates: true });
 
     res.setHeader('Content-Disposition', 'attachment; filename="mis_registros.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
