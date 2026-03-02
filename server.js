@@ -112,6 +112,14 @@ function formatearMoneda(valor) {
   }).format(valor);
 }
 
+function formatearMonedaCompacta(valor) {
+  return new Intl.NumberFormat('es-CO', {
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1
+  }).format(valor);
+}
+
 function formatearFechaCorta(valor) {
   const fecha = new Date(valor);
   if (Number.isNaN(fecha.getTime())) return normalizarTexto(valor);
@@ -176,6 +184,18 @@ function crearColores(cantidad) {
   return Array.from({ length: cantidad }, (_, index) => base[index % base.length]);
 }
 
+function resumirEntradas(datos, limite) {
+  const entradas = Object.entries(datos)
+    .filter(([, valor]) => valor > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (entradas.length <= limite) return entradas;
+
+  const visibles = entradas.slice(0, limite - 1);
+  const resto = entradas.slice(limite - 1).reduce((acc, [, valor]) => acc + valor, 0);
+  return [...visibles, ['Otras categorías', resto]];
+}
+
 function calcularResumen(registros) {
   const totales = { Ingreso: 0, Gasto: 0, Ahorro: 0, Inversión: 0 };
   const categorias = {};
@@ -231,49 +251,87 @@ function agruparRegistrosPorMes(registros) {
 }
 
 function construirConfigGraficoPie(titulo, datos) {
-  const entradas = Object.entries(datos).filter(([, valor]) => valor > 0).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const entradas = resumirEntradas(datos, 6);
   if (entradas.length === 0) return null;
+
+  const total = entradas.reduce((acc, [, valor]) => acc + valor, 0);
 
   return {
     type: 'pie',
     data: {
-      labels: entradas.map(([label]) => label),
+      labels: entradas.map(([label, valor]) => {
+        const porcentaje = total ? ((valor / total) * 100).toFixed(1) : '0.0';
+        return `${label} · ${formatearMonedaCompacta(valor)} (${porcentaje}%)`;
+      }),
       datasets: [
         {
           data: entradas.map(([, valor]) => valor),
-          backgroundColor: crearColores(entradas.length)
+          backgroundColor: crearColores(entradas.length),
+          borderColor: '#FFFFFF',
+          borderWidth: 2
         }
       ]
     },
     options: {
+      animation: false,
+      layout: {
+        padding: 8
+      },
       plugins: {
-        legend: { position: 'bottom' },
-        title: { display: true, text: titulo }
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 10,
+            fontSize: 9,
+            usePointStyle: true,
+            padding: 10
+          }
+        },
+        title: { display: false, text: titulo }
       }
     }
   };
 }
 
 function construirConfigGraficoDona(titulo, datos) {
-  const entradas = Object.entries(datos).filter(([, valor]) => valor > 0).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const entradas = resumirEntradas(datos, 6);
   if (entradas.length === 0) return null;
+
+  const total = entradas.reduce((acc, [, valor]) => acc + valor, 0);
 
   return {
     type: 'doughnut',
     data: {
-      labels: entradas.map(([label]) => label),
+      labels: entradas.map(([label, valor]) => {
+        const porcentaje = total ? ((valor / total) * 100).toFixed(1) : '0.0';
+        return `${label} · ${formatearMonedaCompacta(valor)} (${porcentaje}%)`;
+      }),
       datasets: [
         {
           data: entradas.map(([, valor]) => valor),
-          backgroundColor: crearColores(entradas.length)
+          backgroundColor: crearColores(entradas.length),
+          borderColor: '#FFFFFF',
+          borderWidth: 2
         }
       ]
     },
     options: {
+      animation: false,
+      layout: {
+        padding: 8
+      },
       cutoutPercentage: 58,
       plugins: {
-        legend: { position: 'bottom' },
-        title: { display: true, text: titulo }
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 10,
+            fontSize: 9,
+            usePointStyle: true,
+            padding: 10
+          }
+        },
+        title: { display: false, text: titulo }
       }
     }
   };
@@ -316,115 +374,148 @@ function asegurarEspacio(doc, altoNecesario) {
   }
 }
 
-function dibujarPortada(doc, nombre, totalRegistros) {
-  doc.rect(0, 0, doc.page.width, 170).fill('#0F172A');
-  doc.fillColor('#F8FAFC').fontSize(26).text('Informe financiero', 50, 55);
-  doc.fontSize(15).fillColor('#CBD5E1').text(nombre, 50, 92);
-  doc.fontSize(11).text(`Movimientos analizados: ${totalRegistros}`, 50, 118);
-  doc.moveDown(6);
+function dibujarEncabezadoSeccion(doc, nombre, titulo, subtitulo, totalRegistros) {
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  doc.roundedRect(x, 36, width, 94, 14).fill('#0F172A');
+  doc.fillColor('#F8FAFC').fontSize(22).text(titulo, x + 22, 56, { width: width - 44 });
+  doc.fontSize(11).fillColor('#CBD5E1').text(nombre, x + 22, 86, { width: width - 44 });
+  doc.fontSize(10).fillColor('#94A3B8').text(`${subtitulo}  |  Movimientos: ${totalRegistros}`, x + 22, 104, {
+    width: width - 44
+  });
+  doc.y = 148;
 }
 
 function dibujarTarjetasResumen(doc, resumen) {
   const tarjetas = [
-    { titulo: 'Ingresos', valor: resumen.totales.Ingreso, color: '#DCFCE7', borde: '#22C55E' },
-    { titulo: 'Gastos', valor: resumen.totales.Gasto, color: '#FEE2E2', borde: '#EF4444' },
-    { titulo: 'Ahorro', valor: resumen.totales.Ahorro, color: '#DBEAFE', borde: '#2563EB' },
-    { titulo: 'Inversión', valor: resumen.totales.Inversión, color: '#FCE7F3', borde: '#DB2777' }
+    { titulo: 'Ingresos', valor: resumen.totales.Ingreso, color: '#ECFDF5', borde: '#10B981' },
+    { titulo: 'Gastos', valor: resumen.totales.Gasto, color: '#FEF2F2', borde: '#EF4444' },
+    { titulo: 'Ahorro', valor: resumen.totales.Ahorro, color: '#EFF6FF', borde: '#2563EB' },
+    { titulo: 'Inversión', valor: resumen.totales.Inversión, color: '#FDF2F8', borde: '#DB2777' }
   ];
 
   const left = doc.page.margins.left;
   const top = doc.y;
-  const width = (doc.page.width - left - doc.page.margins.right - 16) / 2;
-  const height = 74;
+  const gap = 8;
+  const width = (doc.page.width - left - doc.page.margins.right - (gap * 3)) / 4;
+  const height = 54;
 
   tarjetas.forEach((tarjeta, index) => {
-    const x = left + (index % 2) * (width + 16);
-    const y = top + Math.floor(index / 2) * (height + 12);
+    const x = left + index * (width + gap);
+    const y = top;
 
-    doc.roundedRect(x, y, width, height, 10).fillAndStroke(tarjeta.color, tarjeta.borde);
-    doc.fillColor('#0F172A').fontSize(10).text(tarjeta.titulo, x + 14, y + 14);
-    doc.fontSize(14).text(formatearMoneda(tarjeta.valor), x + 14, y + 34, { width: width - 28 });
+    doc.roundedRect(x, y, width, height, 12).fillAndStroke(tarjeta.color, tarjeta.borde);
+    doc.fillColor('#334155').fontSize(9).text(tarjeta.titulo, x + 14, y + 13);
+    doc.fillColor('#0F172A').fontSize(13).text(formatearMoneda(tarjeta.valor), x + 14, y + 31, {
+      width: width - 28
+    });
   });
 
-  doc.y = top + (height * 2) + 24;
+  doc.y = top + height + 14;
 }
 
-function dibujarResumenCategorias(doc, resumen) {
-  const categorias = Object.entries(resumen.categorias)
-    .filter(([, valor]) => valor > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-
-  if (categorias.length === 0) return;
-
-  asegurarEspacio(doc, 110);
-  doc.fillColor('#0F172A').fontSize(14).text('Totales por categoría');
-  doc.moveDown(0.4);
-
-  categorias.forEach(([categoria, valor]) => {
-    doc.fontSize(10).fillColor('#334155').text(`${categoria}: ${formatearMoneda(valor)}`);
+function dibujarCajaPanel(doc, x, y, width, height, titulo) {
+  doc.roundedRect(x, y, width, height, 12).fillAndStroke('#FFFFFF', '#D6DEE8');
+  doc.roundedRect(x, y, width, 30, 12).fill('#F8FAFC');
+  doc.rect(x, y + 18, width, 12).fill('#F8FAFC');
+  doc.fillColor('#0F172A').fontSize(11).text(titulo, x + 12, y + 10, {
+    width: width - 24
   });
-
-  doc.moveDown();
 }
 
-function dibujarPlaceholderGrafico(doc, titulo) {
-  asegurarEspacio(doc, 180);
-  doc.fillColor('#0F172A').fontSize(12).text(titulo);
-  doc.moveDown(0.3);
-  const x = doc.page.margins.left;
-  const y = doc.y;
-  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  doc.roundedRect(x, y, width, 150, 10).stroke('#CBD5E1');
-  doc.fillColor('#64748B').fontSize(10).text('No fue posible cargar este gráfico.', x, y + 68, {
-    width,
-    align: 'center'
-  });
-  doc.y = y + 166;
-}
+function dibujarTablaCategoriasPanel(doc, x, y, width, height, resumen) {
+  dibujarCajaPanel(doc, x, y, width, height, 'Totales por categoría');
 
-function dibujarImagenGrafico(doc, titulo, imageBuffer) {
-  if (!imageBuffer) {
-    dibujarPlaceholderGrafico(doc, titulo);
+  const filas = resumirEntradas(resumen.categorias, 8);
+  const inicioY = y + 40;
+  const filaAlto = 18;
+  const areaY = y + height - 24;
+  const maxFilas = Math.max(1, Math.floor((areaY - inicioY) / filaAlto));
+  const visibles = filas.slice(0, maxFilas);
+
+  if (visibles.length === 0) {
+    doc.fillColor('#64748B').fontSize(9).text('Sin movimientos en categorías.', x + 12, inicioY + 10);
     return;
   }
 
-  asegurarEspacio(doc, 250);
-  doc.fillColor('#0F172A').fontSize(12).text(titulo);
-  doc.moveDown(0.3);
-  const x = doc.page.margins.left;
-  const y = doc.y;
-  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  doc.image(imageBuffer, x, y, { fit: [width, 210], align: 'center' });
-  doc.y = y + 220;
+  doc.roundedRect(x + 10, inicioY, width - 20, filaAlto, 6).fill('#E2E8F0');
+  doc.fillColor('#334155').fontSize(8).text('Categoría', x + 16, inicioY + 5, { width: width * 0.52 });
+  doc.text('Total', x + width * 0.56, inicioY + 5, { width: width * 0.3, align: 'right' });
+
+  visibles.forEach(([categoria, valor], index) => {
+    const rowY = inicioY + filaAlto + index * filaAlto;
+    if (rowY + filaAlto > y + height - 10) return;
+
+    if (index % 2 === 0) {
+      doc.roundedRect(x + 10, rowY, width - 20, filaAlto, 4).fill('#F8FAFC');
+    }
+    doc.fillColor('#0F172A').fontSize(8.5).text(categoria, x + 16, rowY + 5, {
+      width: width * 0.5,
+      ellipsis: true
+    });
+    doc.text(formatearMoneda(valor), x + width * 0.5, rowY + 5, {
+      width: width * 0.34,
+      align: 'right'
+    });
+  });
 }
 
-async function dibujarSeccionResumen(doc, titulo, subtitulo, registros) {
+function dibujarGraficoPanel(doc, x, y, width, height, titulo, imageBuffer) {
+  dibujarCajaPanel(doc, x, y, width, height, titulo);
+
+  if (!imageBuffer) {
+    doc.fillColor('#64748B').fontSize(9).text('No fue posible cargar este gráfico.', x + 12, y + 98, {
+      width: width - 24,
+      align: 'center'
+    });
+    return;
+  }
+
+  doc.image(imageBuffer, x + 8, y + 36, {
+    fit: [width - 16, height - 46],
+    align: 'center',
+    valign: 'center'
+  });
+}
+
+async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) {
   const resumen = calcularResumen(registros);
   const graficos = await Promise.all([
     obtenerImagenGrafico(construirConfigGraficoPie('Gastos por categoría', resumen.gastosPorCategoria)),
     obtenerImagenGrafico(construirConfigGraficoDona('Ingresos por categoría', resumen.ingresosPorCategoria)),
     obtenerImagenGrafico(construirConfigDistribucionIngresos(resumen))
   ]);
+  const margin = doc.page.margins.left;
+  const gap = 14;
+  const panelWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap) / 2;
+  const panelHeight = 248;
+  const topGrid = 238;
 
-  asegurarEspacio(doc, 120);
-  doc.fillColor('#0F172A').fontSize(18).text(titulo);
-  if (subtitulo) {
-    doc.moveDown(0.2);
-    doc.fontSize(10).fillColor('#64748B').text(subtitulo);
-  }
-  doc.moveDown(0.8);
-
+  dibujarEncabezadoSeccion(doc, nombre, titulo, subtitulo, registros.length);
   dibujarTarjetasResumen(doc, resumen);
 
-  doc.fillColor('#334155').fontSize(10).text(`Balance neto: ${formatearMoneda(resumen.balance)}`);
-  doc.text(`Movimientos incluidos: ${registros.length}`);
-  doc.moveDown();
+  doc.fillColor('#334155').fontSize(9.5).text(
+    `Balance neto: ${formatearMoneda(resumen.balance)}  |  Último movimiento: ${formatearFechaCorta(
+      obtenerPrimerValor(registros[registros.length - 1] || {}, ['Fecha'])
+    )}`,
+    margin,
+    214,
+    { width: doc.page.width - margin - doc.page.margins.right }
+  );
 
-  dibujarResumenCategorias(doc, resumen);
-  dibujarImagenGrafico(doc, 'Distribución de gastos por categoría', graficos[0]);
-  dibujarImagenGrafico(doc, 'Distribución de ingresos por categoría', graficos[1]);
-  dibujarImagenGrafico(doc, 'Del ingreso total: ahorro vs inversión', graficos[2]);
+  dibujarTablaCategoriasPanel(doc, margin, topGrid, panelWidth, panelHeight, resumen);
+  dibujarGraficoPanel(doc, margin + panelWidth + gap, topGrid, panelWidth, panelHeight, 'Distribución de gastos', graficos[0]);
+  dibujarGraficoPanel(doc, margin, topGrid + panelHeight + gap, panelWidth, panelHeight, 'Distribución de ingresos', graficos[1]);
+  dibujarGraficoPanel(
+    doc,
+    margin + panelWidth + gap,
+    topGrid + panelHeight + gap,
+    panelWidth,
+    panelHeight,
+    'Ingreso total: ahorro vs inversión',
+    graficos[2]
+  );
 }
 
 async function generarPdfInforme(res, nombre, registros) {
@@ -440,9 +531,9 @@ async function generarPdfInforme(res, nombre, registros) {
   res.setHeader('Content-Type', 'application/pdf');
   doc.pipe(res);
 
-  dibujarPortada(doc, nombre, registrosOrdenados.length);
   await dibujarSeccionResumen(
     doc,
+    nombre,
     'Resumen general',
     registrosOrdenados.length
       ? `Periodo analizado: ${formatearFechaCorta(obtenerPrimerValor(registrosOrdenados[0], ['Fecha']))} al ${formatearFechaCorta(obtenerPrimerValor(registrosOrdenados[registrosOrdenados.length - 1], ['Fecha']))}`
@@ -453,7 +544,7 @@ async function generarPdfInforme(res, nombre, registros) {
   for (let index = 0; index < meses.length; index += 1) {
     doc.addPage();
     const mes = meses[index];
-    await dibujarSeccionResumen(doc, mes.etiqueta, 'Resumen mensual', mes.registros);
+    await dibujarSeccionResumen(doc, nombre, mes.etiqueta, 'Resumen mensual', mes.registros);
   }
 
   doc.end();
