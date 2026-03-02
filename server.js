@@ -112,14 +112,6 @@ function formatearMoneda(valor) {
   }).format(valor);
 }
 
-function formatearMonedaCompacta(valor) {
-  return new Intl.NumberFormat('es-CO', {
-    notation: 'compact',
-    compactDisplay: 'short',
-    maximumFractionDigits: 1
-  }).format(valor);
-}
-
 function formatearFechaCorta(valor) {
   const fecha = new Date(valor);
   if (Number.isNaN(fecha.getTime())) return normalizarTexto(valor);
@@ -128,6 +120,13 @@ function formatearFechaCorta(valor) {
     month: '2-digit',
     year: 'numeric'
   }).format(fecha);
+}
+
+function formatearPorcentaje(valor) {
+  return `${new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(valor)}%`;
 }
 
 function convertirFechaExcel(valor) {
@@ -196,6 +195,50 @@ function resumirEntradas(datos, limite) {
   return [...visibles, ['Otras categorías', resto]];
 }
 
+function construirModeloGrafico(tipo, datos, opciones = {}) {
+  const entradas = resumirEntradas(datos, 6);
+  if (entradas.length === 0) return null;
+
+  const total = entradas.reduce((acc, [, valor]) => acc + valor, 0);
+  const colors = crearColores(entradas.length);
+
+  return {
+    leyenda: entradas.map(([label, valor], index) => ({
+      label,
+      valor,
+      porcentaje: total ? (valor / total) * 100 : 0,
+      color: colors[index]
+    })),
+    config: {
+      type: tipo,
+      data: {
+        labels: entradas.map(([label]) => label),
+        datasets: [
+          {
+            data: entradas.map(([, valor]) => valor),
+            backgroundColor: colors,
+            borderColor: '#FFFFFF',
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        animation: false,
+        legend: { display: false },
+        layout: {
+          padding: 8
+        },
+        cutoutPercentage: opciones.cutoutPercentage,
+        plugins: {
+          legend: { display: false },
+          title: { display: false },
+          datalabels: { display: false }
+        }
+      }
+    }
+  };
+}
+
 function calcularResumen(registros) {
   const totales = { Ingreso: 0, Gasto: 0, Ahorro: 0, Inversión: 0 };
   const categorias = {};
@@ -251,90 +294,11 @@ function agruparRegistrosPorMes(registros) {
 }
 
 function construirConfigGraficoPie(titulo, datos) {
-  const entradas = resumirEntradas(datos, 6);
-  if (entradas.length === 0) return null;
-
-  const total = entradas.reduce((acc, [, valor]) => acc + valor, 0);
-
-  return {
-    type: 'pie',
-    data: {
-      labels: entradas.map(([label, valor]) => {
-        const porcentaje = total ? ((valor / total) * 100).toFixed(1) : '0.0';
-        return `${label} · ${formatearMonedaCompacta(valor)} (${porcentaje}%)`;
-      }),
-      datasets: [
-        {
-          data: entradas.map(([, valor]) => valor),
-          backgroundColor: crearColores(entradas.length),
-          borderColor: '#FFFFFF',
-          borderWidth: 2
-        }
-      ]
-    },
-    options: {
-      animation: false,
-      layout: {
-        padding: 8
-      },
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            boxWidth: 10,
-            fontSize: 9,
-            usePointStyle: true,
-            padding: 10
-          }
-        },
-        title: { display: false, text: titulo }
-      }
-    }
-  };
+  return construirModeloGrafico('pie', datos);
 }
 
 function construirConfigGraficoDona(titulo, datos) {
-  const entradas = resumirEntradas(datos, 6);
-  if (entradas.length === 0) return null;
-
-  const total = entradas.reduce((acc, [, valor]) => acc + valor, 0);
-
-  return {
-    type: 'doughnut',
-    data: {
-      labels: entradas.map(([label, valor]) => {
-        const porcentaje = total ? ((valor / total) * 100).toFixed(1) : '0.0';
-        return `${label} · ${formatearMonedaCompacta(valor)} (${porcentaje}%)`;
-      }),
-      datasets: [
-        {
-          data: entradas.map(([, valor]) => valor),
-          backgroundColor: crearColores(entradas.length),
-          borderColor: '#FFFFFF',
-          borderWidth: 2
-        }
-      ]
-    },
-    options: {
-      animation: false,
-      layout: {
-        padding: 8
-      },
-      cutoutPercentage: 58,
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            boxWidth: 10,
-            fontSize: 9,
-            usePointStyle: true,
-            padding: 10
-          }
-        },
-        title: { display: false, text: titulo }
-      }
-    }
-  };
+  return construirModeloGrafico('doughnut', datos, { cutoutPercentage: 58 });
 }
 
 function construirConfigDistribucionIngresos(resumen) {
@@ -355,7 +319,7 @@ function construirConfigDistribucionIngresos(resumen) {
 async function obtenerImagenGrafico(config) {
   if (!config) return null;
 
-  const url = `https://quickchart.io/chart?width=900&height=520&format=png&backgroundColor=white&c=${encodeURIComponent(JSON.stringify(config))}`;
+  const url = `https://quickchart.io/chart?width=700&height=420&format=png&backgroundColor=white&c=${encodeURIComponent(JSON.stringify(config))}`;
 
   try {
     const respuesta = await fetch(url);
@@ -461,19 +425,55 @@ function dibujarTablaCategoriasPanel(doc, x, y, width, height, resumen) {
   });
 }
 
-function dibujarGraficoPanel(doc, x, y, width, height, titulo, imageBuffer) {
-  dibujarCajaPanel(doc, x, y, width, height, titulo);
+function dibujarLeyendaGrafico(doc, x, y, width, height, leyenda) {
+  const inicioY = y + 6;
+  const filaAlto = 18;
+  const disponibles = Math.max(1, Math.floor((height - 6) / filaAlto));
+  const visibles = (leyenda || []).slice(0, disponibles);
 
-  if (!imageBuffer) {
-    doc.fillColor('#64748B').fontSize(9).text('No fue posible cargar este gráfico.', x + 12, y + 98, {
-      width: width - 24,
+  if (visibles.length === 0) {
+    doc.fillColor('#64748B').fontSize(8.5).text('Sin datos', x, inicioY + 8, { width });
+    return;
+  }
+
+  doc.fillColor('#334155').fontSize(8).text('Categoría', x + 16, inicioY, { width: width * 0.62 });
+  doc.text('%', x + width * 0.72, inicioY, { width: width * 0.2, align: 'right' });
+
+  visibles.forEach((item, index) => {
+    const rowY = inicioY + 14 + index * filaAlto;
+    doc.circle(x + 6, rowY + 5, 4).fill(item.color);
+    doc.fillColor('#0F172A').fontSize(8.2).text(item.label, x + 16, rowY, {
+      width: width * 0.6,
+      ellipsis: true
+    });
+    doc.text(formatearPorcentaje(item.porcentaje), x + width * 0.68, rowY, {
+      width: width * 0.24,
+      align: 'right'
+    });
+  });
+}
+
+function dibujarGraficoPanel(doc, x, y, width, height, titulo, grafico) {
+  dibujarCajaPanel(doc, x, y, width, height, titulo);
+  const bodyY = y + 38;
+  const bodyHeight = height - 48;
+  const legendWidth = Math.max(118, Math.min(150, width * 0.42));
+  const chartWidth = width - legendWidth - 24;
+  const legendX = x + 12;
+  const chartX = legendX + legendWidth + 12;
+
+  dibujarLeyendaGrafico(doc, legendX, bodyY, legendWidth, bodyHeight, grafico?.leyenda);
+
+  if (!grafico?.imageBuffer) {
+    doc.fillColor('#64748B').fontSize(8.5).text('No fue posible cargar este gráfico.', chartX, bodyY + 80, {
+      width: chartWidth,
       align: 'center'
     });
     return;
   }
 
-  doc.image(imageBuffer, x + 8, y + 36, {
-    fit: [width - 16, height - 46],
+  doc.image(grafico.imageBuffer, chartX, bodyY + 8, {
+    fit: [chartWidth, bodyHeight - 12],
     align: 'center',
     valign: 'center'
   });
@@ -481,11 +481,20 @@ function dibujarGraficoPanel(doc, x, y, width, height, titulo, imageBuffer) {
 
 async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) {
   const resumen = calcularResumen(registros);
-  const graficos = await Promise.all([
-    obtenerImagenGrafico(construirConfigGraficoPie('Gastos por categoría', resumen.gastosPorCategoria)),
-    obtenerImagenGrafico(construirConfigGraficoDona('Ingresos por categoría', resumen.ingresosPorCategoria)),
-    obtenerImagenGrafico(construirConfigDistribucionIngresos(resumen))
-  ]);
+  const modelosGraficos = [
+    construirConfigGraficoPie('Gastos por categoría', resumen.gastosPorCategoria),
+    construirConfigGraficoDona('Ingresos por categoría', resumen.ingresosPorCategoria),
+    construirConfigDistribucionIngresos(resumen)
+  ];
+  const graficos = await Promise.all(
+    modelosGraficos.map(async modelo => {
+      if (!modelo) return null;
+      return {
+        ...modelo,
+        imageBuffer: await obtenerImagenGrafico(modelo.config)
+      };
+    })
+  );
   const margin = doc.page.margins.left;
   const gap = 14;
   const panelWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap) / 2;
