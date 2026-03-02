@@ -1,6 +1,6 @@
 const express = require('express');
+const PDFDocument = require('pdfkit');
 const XLSX = require('xlsx');
-const puppeteer = require('puppeteer');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -81,6 +81,87 @@ async function leerRegistros() {
   return leerJson(TRANSACTIONS_FILE);
 }
 
+function obtenerRegistrosUsuario(email, usuarios, registros) {
+  const emailNormalizado = normalizarTexto(email).toLowerCase();
+  const usuario = usuarios.find(
+    u => normalizarTexto(obtenerPrimerValor(u, ['email', 'Email'])).toLowerCase() === emailNormalizado
+  );
+
+  if (!usuario) return { usuario: null, misRegistros: [] };
+
+  const telefonosUsuario = obtenerTelefonosCandidatos(usuario);
+  const misRegistros = registros.filter(r => {
+    const telefonoRegistro = obtenerPrimerValor(r, ['Telefono', 'telefono', 'Teléfono', 'TELÉFONO']);
+    return telefonosCoinciden(telefonoRegistro, telefonosUsuario);
+  });
+
+  return { usuario, misRegistros };
+}
+
+function convertirNumero(valor) {
+  const numero = Number(String(valor || '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function formatearMoneda(valor) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0
+  }).format(valor);
+}
+
+function generarPdfInforme(res, nombre, registros) {
+  const totales = { Ingreso: 0, Gasto: 0, Ahorro: 0, Inversión: 0 };
+  registros.forEach(registro => {
+    const tipo = obtenerPrimerValor(registro, ['Tipo', 'tipo']);
+    totales[tipo] = (totales[tipo] || 0) + convertirNumero(registro.Valor);
+  });
+
+  const balance = totales.Ingreso - totales.Gasto;
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+  res.setHeader('Content-Disposition', 'attachment; filename="mi_informe.pdf"');
+  res.setHeader('Content-Type', 'application/pdf');
+  doc.pipe(res);
+
+  doc.fontSize(22).text('Informe de registros', { align: 'center' });
+  doc.moveDown(0.4);
+  doc.fontSize(14).text(nombre, { align: 'center' });
+  doc.moveDown();
+  doc.fontSize(11).fillColor('#555').text(`Total de movimientos: ${registros.length}`);
+  doc.text(`Ingresos: ${formatearMoneda(totales.Ingreso)}`);
+  doc.text(`Gastos: ${formatearMoneda(totales.Gasto)}`);
+  doc.text(`Ahorros: ${formatearMoneda(totales.Ahorro)}`);
+  doc.text(`Inversiones: ${formatearMoneda(totales.Inversión)}`);
+  doc.text(`Balance neto: ${formatearMoneda(balance)}`);
+  doc.moveDown();
+
+  doc.fillColor('#111').fontSize(13).text('Ultimos registros');
+  doc.moveDown(0.5);
+
+  const recientes = registros.slice(-20).reverse();
+  recientes.forEach((registro, index) => {
+    const fecha = obtenerPrimerValor(registro, ['Fecha', 'fecha']);
+    const tipo = obtenerPrimerValor(registro, ['Tipo', 'tipo']);
+    const categoria = obtenerPrimerValor(registro, ['Categoria', 'Categoría', 'categoria']);
+    const descripcion = obtenerPrimerValor(registro, ['Descripcion', 'Descripción', 'descripcion']) || '-';
+    const valor = formatearMoneda(convertirNumero(registro.Valor));
+
+    if (doc.y > 720) {
+      doc.addPage();
+    }
+
+    doc.fontSize(10).fillColor('#111').text(
+      `${index + 1}. ${fecha} | ${tipo} | ${categoria} | ${valor}`
+    );
+    doc.fontSize(9).fillColor('#666').text(`   ${descripcion}`);
+    doc.moveDown(0.4);
+  });
+
+  doc.end();
+}
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -92,8 +173,7 @@ app.post('/api/verificar', async (req, res) => {
     if (!email) return res.status(400).json({ ok: false, mensaje: 'Email requerido.' });
 
     const usuarios = await leerUsuarios();
-    const emailNormalizado = normalizarTexto(email).toLowerCase();
-    const usuario = usuarios.find(u => normalizarTexto(obtenerPrimerValor(u, ['email', 'Email'])).toLowerCase() === emailNormalizado);
+    const { usuario } = obtenerRegistrosUsuario(email, usuarios, []);
 
     if (!usuario) {
       return res.json({ ok: false, mensaje: 'No encontramos ese correo en nuestros registros.' });
@@ -111,17 +191,10 @@ app.post('/api/verificar', async (req, res) => {
 app.get('/api/descargar/excel', async (req, res) => {
   try {
     const { email } = req.query;
-    const usuarios  = await leerUsuarios();
-    const emailNormalizado = normalizarTexto(email).toLowerCase();
-    const usuario   = usuarios.find(u => normalizarTexto(obtenerPrimerValor(u, ['email', 'Email'])).toLowerCase() === emailNormalizado);
-    if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
-
-    const telefonosUsuario = obtenerTelefonosCandidatos(usuario);
+    const usuarios = await leerUsuarios();
     const registros = await leerRegistros();
-    const misRegistros = registros.filter(r => {
-      const telefonoRegistro = obtenerPrimerValor(r, ['Telefono', 'telefono', 'Teléfono', 'TELÉFONO']);
-      return telefonosCoinciden(telefonoRegistro, telefonosUsuario);
-    });
+    const { usuario, misRegistros } = obtenerRegistrosUsuario(email, usuarios, registros);
+    if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
 
     if (misRegistros.length === 0) {
       return res.status(404).json({ mensaje: 'No tienes registros disponibles.' });
@@ -145,52 +218,22 @@ app.get('/api/descargar/excel', async (req, res) => {
 app.get('/api/descargar/pdf', async (req, res) => {
   try {
     const { email } = req.query;
-    const usuarios  = await leerUsuarios();
-    const emailNormalizado = normalizarTexto(email).toLowerCase();
-    const usuario   = usuarios.find(u => normalizarTexto(obtenerPrimerValor(u, ['email', 'Email'])).toLowerCase() === emailNormalizado);
-    if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
-
-    const telefonosUsuario = obtenerTelefonosCandidatos(usuario);
+    const usuarios = await leerUsuarios();
     const registros = await leerRegistros();
-    const misRegistros = registros.filter(r => {
-      const telefonoRegistro = obtenerPrimerValor(r, ['Telefono', 'telefono', 'Teléfono', 'TELÉFONO']);
-      return telefonosCoinciden(telefonoRegistro, telefonosUsuario);
-    });
+    const { usuario, misRegistros } = obtenerRegistrosUsuario(email, usuarios, registros);
+    if (!usuario) return res.status(404).json({ mensaje: 'Usuario no encontrado.' });
 
     if (misRegistros.length === 0) {
       return res.status(404).json({ mensaje: 'No tienes registros disponibles.' });
     }
 
     const nombre = `${usuario.Nombre || ''} ${usuario.Apellidos || ''}`.trim();
-    const htmlInforme = generarHTMLInforme(nombre, misRegistros);
-
-    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    const page = await browser.newPage();
-    await page.setContent(htmlInforme, { waitUntil: 'networkidle0' });
-    await page.waitForTimeout(1500); // esperar que carguen los gráficos
-
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
-      printBackground: true
-    });
-
-    await browser.close();
-
-    res.setHeader('Content-Disposition', 'attachment; filename="mi_informe.pdf"');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.send(pdfBuffer);
+    generarPdfInforme(res, nombre, misRegistros);
   } catch (err) {
     console.error(err);
     res.status(500).json({ mensaje: 'Error al generar el PDF.' });
   }
 });
-
-// ── Generador del HTML del informe (próximo paso) ──
-function generarHTMLInforme(nombre, registros) {
-  // Esta función la construimos en la siguiente etapa con gráficos y tablas
-  return `<html><body><h1>Informe de ${nombre}</h1><p>${registros.length} registros encontrados.</p></body></html>`;
-}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
