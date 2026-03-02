@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Descarga tus Registros | Mony AI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 20px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    }
+
+    .logo { text-align: center; margin-bottom: 32px; }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .logo h1 { color: #f1f5f9; font-size: 22px; font-weight: 700; }
+    .logo p { color: #94a3b8; font-size: 14px; margin-top: 4px; }
+
+    #screen-email h2 { color: #f1f5f9; font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+    #screen-email .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 28px; line-height: 1.5; }
+
+    label { display: block; color: #cbd5e1; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+
+    input[type="email"] {
+      width: 100%;
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      border-radius: 10px;
+      padding: 13px 16px;
+      color: #f1f5f9;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="email"]:focus { border-color: #6366f1; }
+    input[type="email"]::placeholder { color: #475569; }
+
+    .btn-primary {
+      width: 100%;
+      margin-top: 20px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .error-msg {
+      margin-top: 14px;
+      background: #450a0a;
+      border: 1px solid #dc2626;
+      color: #fca5a5;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+
+    #screen-descarga { display: none; }
+
+    .bienvenida {
+      background: linear-gradient(135deg, #1a1f3a, #1e1b4b);
+      border: 1px solid #3730a3;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    .bienvenida .hi { color: #a5b4fc; font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
+    .bienvenida .nombre { color: #f1f5f9; font-size: 20px; font-weight: 700; margin: 4px 0 8px; }
+    .bienvenida .desc { color: #94a3b8; font-size: 13px; line-height: 1.5; }
+
+    .descarga-titulo { color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+
+    .btn-descarga {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      border-radius: 12px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 12px;
+      text-decoration: none;
+    }
+
+    .btn-descarga:hover { border-color: #6366f1; background: #1a1f3a; }
+
+    .btn-descarga .icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .icon-excel { background: #14532d; }
+    .icon-pdf   { background: #450a0a; }
+
+    .btn-descarga .info { text-align: left; flex: 1; }
+    .btn-descarga .info-title { color: #f1f5f9; font-size: 15px; font-weight: 600; }
+    .btn-descarga .info-sub { color: #64748b; font-size: 12px; margin-top: 2px; }
+    .btn-descarga .arrow { color: #475569; font-size: 18px; }
+
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+
+    .loading-overlay.active { display: flex; }
+
+    .loading-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 32px 40px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #334155;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-box p { color: #94a3b8; font-size: 14px; }
+
+    .volver { display: block; text-align: center; margin-top: 24px; color: #475569; font-size: 13px; cursor: pointer; }
+    .volver:hover { color: #94a3b8; }
+
+    .footer { text-align: center; margin-top: 32px; color: #334155; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="loading-overlay" id="loading">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <p id="loading-text">Verificando correo...</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">💰</div>
+      <h1>Mony AI</h1>
+      <p>Portal de descarga de registros</p>
+    </div>
+
+    <!-- Pantalla 1 -->
+    <div id="screen-email">
+      <h2>Descarga tu información</h2>
+      <p class="subtitle">Ingresa tu correo electrónico para acceder a tus registros financieros.</p>
+      <label for="email-input">Correo electrónico</label>
+      <input type="email" id="email-input" placeholder="tucorreo@ejemplo.com" autocomplete="email" />
+      <button class="btn-primary" id="btn-verificar" onclick="verificarEmail()">Continuar</button>
+      <div class="error-msg" id="error-msg"></div>
+    </div>
+
+    <!-- Pantalla 2 -->
+    <div id="screen-descarga">
+      <div class="bienvenida">
+        <div class="hi">¡Hola de nuevo!</div>
+        <div class="nombre" id="nombre-usuario"></div>
+        <div class="desc">Tu información está lista para descargar.</div>
+      </div>
+
+      <div class="descarga-titulo">Elige qué descargar</div>
+
+      <a class="btn-descarga" href="#" onclick="descargar('excel', event)">
+        <div class="icon-wrap icon-excel">📊</div>
+        <div class="info">
+          <div class="info-title">Descargar Excel</div>
+          <div class="info-sub">Todos tus registros en una hoja de cálculo</div>
+        </div>
+        <div class="arrow">›</div>
+      </a>
+
+      <a class="btn-descarga" href="#" onclick="descargar('pdf', event)">
+        <div class="icon-wrap icon-pdf">📄</div>
+        <div class="info">
+          <div class="info-title">Descargar Informe PDF</div>
+          <div class="info-sub">Resumen mensual con gráficos y tablas</div>
+        </div>
+        <div class="arrow">›</div>
+      </a>
+
+      <span class="volver" onclick="volverAlInicio()">← Usar otro correo</span>
+    </div>
+
+    <div class="footer">© 2024 Mony AI · Todos los derechos reservados</div>
+  </div>
+
+  <script>
+    let emailActual = '';
+
+    document.getElementById('email-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') verificarEmail();
+    });
+
+    function mostrarLoading(texto) {
+      document.getElementById('loading-text').textContent = texto || 'Cargando...';
+      document.getElementById('loading').classList.add('active');
+    }
+
+    function ocultarLoading() {
+      document.getElementById('loading').classList.remove('active');
+    }
+
+    function mostrarError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    async function verificarEmail() {
+      const email = document.getElementById('email-input').value.trim();
+      if (!email || !email.includes('@')) {
+        mostrarError('Por favor ingresa un correo válido.');
+        return;
+      }
+      document.getElementById('error-msg').style.display = 'none';
+      mostrarLoading('Verificando correo...');
+      const btn = document.getElementById('btn-verificar');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/verificar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          emailActual = email;
+          document.getElementById('nombre-usuario').textContent = data.nombre;
+          document.getElementById('screen-email').style.display = 'none';
+          document.getElementById('screen-descarga').style.display = 'block';
+        } else {
+          mostrarError(data.mensaje || 'No encontramos ese correo en nuestros registros.');
+        }
+      } catch (err) {
+        mostrarError('Error de conexión. Intenta de nuevo.');
+      } finally {
+        ocultarLoading();
+        btn.disabled = false;
+      }
+    }
+
+    async function descargar(tipo, event) {
+      event.preventDefault();
+      if (!emailActual) return;
+      mostrarLoading(tipo === 'excel' ? 'Generando tu Excel...' : 'Generando tu informe PDF... (esto puede tardar unos segundos)');
+      try {
+        const res = await fetch(`/api/descargar/${tipo}?email=${encodeURIComponent(emailActual)}`);
+        if (!res.ok) {
+          const err = await res.json();
+          alert(err.mensaje || 'Error al generar el archivo.');
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = tipo === 'excel' ? 'mis_registros.xlsx' : 'mi_informe.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Error de conexión. Intenta de nuevo.');
+      } finally {
+        ocultarLoading();
+      }
+    }
+
+    function volverAlInicio() {
+      document.getElementById('screen-descarga').style.display = 'none';
+      document.getElementById('screen-email').style.display = 'block';
+      document.getElementById('email-input').value = '';
+      emailActual = '';
+    }
+  </script>
+</body>
+</html>
