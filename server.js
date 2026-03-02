@@ -479,6 +479,30 @@ function dibujarGraficoPanel(doc, x, y, width, height, titulo, grafico) {
   });
 }
 
+function dibujarBloqueGraficoVertical(doc, x, y, width, height, titulo, grafico) {
+  dibujarCajaPanel(doc, x, y, width, height, titulo);
+  const bodyY = y + 40;
+  const legendHeight = Math.min(118, Math.max(88, height * 0.32));
+  const chartY = bodyY + legendHeight + 8;
+  const chartHeight = height - (chartY - y) - 16;
+
+  dibujarLeyendaGrafico(doc, x + 14, bodyY, width - 28, legendHeight, grafico?.leyenda);
+
+  if (!grafico?.imageBuffer) {
+    doc.fillColor('#64748B').fontSize(8.5).text('No fue posible cargar este gráfico.', x + 18, chartY + 30, {
+      width: width - 36,
+      align: 'center'
+    });
+    return;
+  }
+
+  doc.image(grafico.imageBuffer, x + 18, chartY, {
+    fit: [width - 36, chartHeight],
+    align: 'center',
+    valign: 'center'
+  });
+}
+
 async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) {
   const resumen = calcularResumen(registros);
   const modelosGraficos = [
@@ -496,10 +520,11 @@ async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) 
     })
   );
   const margin = doc.page.margins.left;
+  const panelWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const gap = 14;
-  const panelWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap) / 2;
-  const panelHeight = 248;
-  const topGrid = 238;
+  const topY = 238;
+  const categoriasHeight = 220;
+  const chartHeight = 300;
 
   dibujarEncabezadoSeccion(doc, nombre, titulo, subtitulo, registros.length);
   dibujarTarjetasResumen(doc, resumen);
@@ -513,15 +538,23 @@ async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) 
     { width: doc.page.width - margin - doc.page.margins.right }
   );
 
-  dibujarTablaCategoriasPanel(doc, margin, topGrid, panelWidth, panelHeight, resumen);
-  dibujarGraficoPanel(doc, margin + panelWidth + gap, topGrid, panelWidth, panelHeight, 'Distribución de gastos', graficos[0]);
-  dibujarGraficoPanel(doc, margin, topGrid + panelHeight + gap, panelWidth, panelHeight, 'Distribución de ingresos', graficos[1]);
-  dibujarGraficoPanel(
+  dibujarTablaCategoriasPanel(doc, margin, topY, panelWidth, categoriasHeight, resumen);
+  dibujarBloqueGraficoVertical(doc, margin, topY + categoriasHeight + gap, panelWidth, chartHeight, 'Distribución de gastos', graficos[0]);
+  dibujarBloqueGraficoVertical(
     doc,
-    margin + panelWidth + gap,
-    topGrid + panelHeight + gap,
+    margin,
+    topY + categoriasHeight + gap + chartHeight + gap,
     panelWidth,
-    panelHeight,
+    chartHeight,
+    'Distribución de ingresos',
+    graficos[1]
+  );
+  dibujarBloqueGraficoVertical(
+    doc,
+    margin,
+    topY + categoriasHeight + gap + chartHeight + gap + chartHeight + gap,
+    panelWidth,
+    chartHeight,
     'Ingreso total: ahorro vs inversión',
     graficos[2]
   );
