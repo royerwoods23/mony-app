@@ -479,28 +479,13 @@ function dibujarGraficoPanel(doc, x, y, width, height, titulo, grafico) {
   });
 }
 
-function dibujarBloqueGraficoVertical(doc, x, y, width, height, titulo, grafico) {
-  dibujarCajaPanel(doc, x, y, width, height, titulo);
-  const bodyY = y + 40;
-  const legendHeight = Math.min(118, Math.max(88, height * 0.32));
-  const chartY = bodyY + legendHeight + 8;
-  const chartHeight = height - (chartY - y) - 16;
+function dibujarEncabezadoPaginaGraficos(doc, nombre, titulo) {
+  const x = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  dibujarLeyendaGrafico(doc, x + 14, bodyY, width - 28, legendHeight, grafico?.leyenda);
-
-  if (!grafico?.imageBuffer) {
-    doc.fillColor('#64748B').fontSize(8.5).text('No fue posible cargar este gráfico.', x + 18, chartY + 30, {
-      width: width - 36,
-      align: 'center'
-    });
-    return;
-  }
-
-  doc.image(grafico.imageBuffer, x + 18, chartY, {
-    fit: [width - 36, chartHeight],
-    align: 'center',
-    valign: 'center'
-  });
+  doc.roundedRect(x, 36, width, 62, 12).fill('#F8FAFC');
+  doc.fillColor('#0F172A').fontSize(18).text(`${titulo} · gráficos`, x + 18, 54, { width: width - 36 });
+  doc.fontSize(9.5).fillColor('#64748B').text(nombre, x + 18, 76, { width: width - 36 });
 }
 
 async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) {
@@ -523,7 +508,7 @@ async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) 
   const panelWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const gap = 14;
   const topY = 238;
-  const categoriasHeight = 220;
+  const categoriasHeight = 180;
   const chartHeight = 300;
 
   dibujarEncabezadoSeccion(doc, nombre, titulo, subtitulo, registros.length);
@@ -539,25 +524,12 @@ async function dibujarSeccionResumen(doc, nombre, titulo, subtitulo, registros) 
   );
 
   dibujarTablaCategoriasPanel(doc, margin, topY, panelWidth, categoriasHeight, resumen);
-  dibujarBloqueGraficoVertical(doc, margin, topY + categoriasHeight + gap, panelWidth, chartHeight, 'Distribución de gastos', graficos[0]);
-  dibujarBloqueGraficoVertical(
-    doc,
-    margin,
-    topY + categoriasHeight + gap + chartHeight + gap,
-    panelWidth,
-    chartHeight,
-    'Distribución de ingresos',
-    graficos[1]
-  );
-  dibujarBloqueGraficoVertical(
-    doc,
-    margin,
-    topY + categoriasHeight + gap + chartHeight + gap + chartHeight + gap,
-    panelWidth,
-    chartHeight,
-    'Ingreso total: ahorro vs inversión',
-    graficos[2]
-  );
+  dibujarGraficoPanel(doc, margin, topY + categoriasHeight + gap, panelWidth, chartHeight, 'Distribución de gastos', graficos[0]);
+
+  doc.addPage();
+  dibujarEncabezadoPaginaGraficos(doc, nombre, titulo);
+  dibujarGraficoPanel(doc, margin, 122, panelWidth, 280, 'Distribución de ingresos', graficos[1]);
+  dibujarGraficoPanel(doc, margin, 420, panelWidth, 280, 'Ingreso total: ahorro vs inversión', graficos[2]);
 }
 
 async function generarPdfInforme(res, nombre, registros) {
